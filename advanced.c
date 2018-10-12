@@ -3,12 +3,60 @@
 #include <stdlib.h>
 #include <math.h>
 
-int cmp( const void *a , const void *b);
-void merge(int* changenum, int* arr_num, int mode, char* isSorted);
 float* tmp;
 float* freee;
 float* arr;
 float* recv;
+
+int List_size_in_process, front, rest;
+int RecvPrev, RecvNext; 
+
+void merge_L(){ 
+  int recv_ptr = RecvPrev - 1;
+  int arr_ptr = List_size_in_process - 1;
+  for(int tmp_ptr = List_size_in_process-1; tmp_ptr >=0; tmp_ptr--){ 
+    if(recv_ptr>=0 && arr[arr_ptr] < recv[recv_ptr]){
+      tmp[tmp_ptr] = recv[recv_ptr];
+      --recv_ptr;
+    }else{
+      tmp[tmp_ptr] = arr[arr_ptr];
+      --arr_ptr;
+    }
+  }
+ 
+  freee = arr;
+  arr = tmp;
+  tmp = freee;
+
+}
+
+void merge_R(){ 
+  int recv_ptr = 0;
+  int arr_ptr = 0;
+  for(int tmp_ptr = 0; tmp_ptr < List_size_in_process; tmp_ptr++){
+    if(recv_ptr< RecvNext && recv[recv_ptr] < arr[arr_ptr]){
+          tmp[tmp_ptr] = recv[recv_ptr];
+          ++recv_ptr;
+    }else{
+      tmp[tmp_ptr] = arr[arr_ptr];
+      ++arr_ptr;
+    }
+  } 
+  freee = arr;
+  arr = tmp;
+  tmp = freee;
+}
+
+
+int cmp( const void *a , const void *b){
+	if(*(const float*)a < *(const float*)b){
+
+			return -1;
+	}
+    return *(const float*)a>*(const float*)b;
+}
+
+
 int main(int argc, char *argv[])
 {
 	int rank, size;
@@ -33,33 +81,17 @@ int main(int argc, char *argv[])
 		}size = N;
 	}
   
-	int List_size_in_process, front, rest;
-	int RecvPrev, RecvNext;
-
 	rest = N%size;
-	if(rest){
-		if(rank<rest){
-			List_size_in_process = N/size+1;
-			front = rank*(List_size_in_process);
-			RecvPrev = List_size_in_process;
-			if(rank==rest-1)RecvNext = List_size_in_process-1;
-			else RecvNext = List_size_in_process;
-		}else{
-			List_size_in_process = N/size;
-			front = rank*List_size_in_process+rest;
-			RecvNext = List_size_in_process;
-			if(rank==rest)RecvPrev = List_size_in_process+1;
-			else RecvPrev = List_size_in_process;
-
-		}
-	}else{
-		List_size_in_process = N/size;
-		front = rank*List_size_in_process;
-		RecvPrev = List_size_in_process;
-		RecvNext = List_size_in_process;
-	}
-	
 		
+  List_size_in_process = N/size;
+  if(rank<rest) {++List_size_in_process;
+  front = rank*(List_size_in_process);}
+  else front = rank*(List_size_in_process) + rest;
+  RecvPrev = List_size_in_process;
+	RecvNext = List_size_in_process;
+  if(rank == rest && rest!=0)RecvPrev=List_size_in_process+1;
+  if((rank+1) == rest)RecvNext=List_size_in_process-1;
+  
 	//MPI open file
 	MPI_File file_in,file_out;
 	int rc=MPI_File_open(custom_world, argv[2], MPI_MODE_RDONLY, MPI_INFO_NULL,&file_in);
@@ -68,47 +100,46 @@ int main(int argc, char *argv[])
 		printf("fail to open\n");
 		MPI_Abort(custom_world,rc);
 	}
-    //MPI read file
+  
+  arr=(float*)malloc(List_size_in_process*sizeof(float));
+  recv=(float*)malloc(RecvPrev*sizeof(float));
+	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
+    
+  //MPI read file
 	offset=front*sizeof(MPI_FLOAT);
-	arr=(float*)malloc(List_size_in_process*sizeof(MPI_FLOAT));
 	MPI_File_read_at(file_in,offset,arr,List_size_in_process,MPI_FLOAT,MPI_STATUS_IGNORE);
 	MPI_File_close(&file_in);
  
-	
-	
+
 	//sort inside 
 	qsort(arr, List_size_in_process, sizeof(float), cmp);
-	recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
-	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
-
-	char tmp2, isSorted = 0;
-	while(isSorted==0){
-		isSorted = 1;
+	
+	//char tmp2, isSorted = 0;
+	//while(isSorted==0){
+  for(int j = 0; j < size; j++){
+		//isSorted = 1;
 		if(rank%2){
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
+				merge_L();
 			}
-			//MPI_Barrier(custom_world);
+
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvNext,&List_size_in_process,0, &isSorted);
+				merge_R();
 			}
 		}else{
 			if(rank != size-1){	
-				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				
-			  merge(&RecvNext,&List_size_in_process,0, &isSorted);
+				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);			
+  			merge_R();
 			}
-			//MPI_Barrier(custom_world);
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
-
+				merge_L();
 			}
 		}
-		    tmp2=isSorted;
-        MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
+    //tmp2=isSorted;
+    //MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
 	MPI_File_open(custom_world, argv[3], MPI_MODE_CREATE|MPI_MODE_WRONLY , MPI_INFO_NULL, &file_out);
@@ -117,51 +148,10 @@ int main(int argc, char *argv[])
 
 	free(arr);
 	free(tmp);
-	//MPI_Barrier(custom_world);
+  free(recv);
 	MPI_Finalize();
 	return 0;
 }
 
-void merge(int* recvnum, int *arr_num, int mode, char* isSorted){ 
-  if(mode){//from prev keep large
-	int recv_ptr = *recvnum - 1;
-	int arr_ptr = *arr_num - 1;
-    for(int tmp_ptr = *arr_num-1; tmp_ptr >=0; tmp_ptr--){ 
-	    if(recv_ptr>=0 && arr[arr_ptr] < recv[recv_ptr]){
-        tmp[tmp_ptr] = recv[recv_ptr];
-		    *isSorted = 0;
-        --recv_ptr;
-      }else{
-        tmp[tmp_ptr] = arr[arr_ptr];
-        --arr_ptr;
-      }
-    }
-  }else{
-    int recv_ptr = 0;
-	  int arr_ptr = 0;
-    for(int tmp_ptr = 0; tmp_ptr < *arr_num; tmp_ptr++){
-	  if(recv_ptr< *recvnum && recv[recv_ptr] < arr[arr_ptr]){
-        tmp[tmp_ptr] = recv[recv_ptr];
-		    *isSorted = 0;
-        ++recv_ptr;
-      }else{
-        tmp[tmp_ptr] = arr[arr_ptr];
-        ++arr_ptr;
-      }
-    } 
-  }
-  freee = arr;
-  arr = tmp;
-  tmp = freee;
 
-}
-
-
-int cmp( const void *a , const void *b){
-	if(*(const float*)a < *(const float*)b){
-
-			return -1;
-	}
-    return *(const float*)a>*(const float*)b;
-}
 
