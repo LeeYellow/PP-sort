@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
                                 MPI_Sendrecv(arr,changeNum,MPI_FLOAT,rank-1,1,recv,changeNum,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
                                 merge(&changeNum,&List_size_in_process,1, &isSorted);
                         }
-                        MPI_Barrier(custom_world);
+                        //MPI_Barrier(custom_world);
                         if(rank != size-1){
                                 MPI_Sendrecv(&arr[List_size_in_process-changeNum],changeNum,MPI_FLOAT,rank+1,0,recv,changeNum,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
                                 merge(&changeNum,&List_size_in_process,0, &isSorted);
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
                                 MPI_Sendrecv(&arr[List_size_in_process-changeNum],changeNum,MPI_FLOAT,rank+1,0,recv,changeNum,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
                                 merge(&changeNum,&List_size_in_process,0, &isSorted);
                         }
-                        MPI_Barrier(custom_world);
+                        //MPI_Barrier(custom_world);
                         if(rank > 0){
                                 MPI_Sendrecv(arr,changeNum,MPI_FLOAT,rank-1,1,recv,changeNum,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
                                 merge(&changeNum,&List_size_in_process,1, &isSorted);
@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
         free(arr);
         free(tmp);
         free(recv);
-        MPI_Barrier(custom_world);
+        //MPI_Barrier(custom_world);
         MPI_Finalize();
         return 0;
 }
