@@ -4,7 +4,7 @@
 #include <math.h>
 
 int cmp( const void *a , const void *b);
-void merge(int* changenum, int* arr_num, int mode);
+void merge(int* changenum, int* arr_num, int mode, char* isSorted);
 float* tmp;
 float* freee;
 float* arr;
@@ -81,30 +81,34 @@ int main(int argc, char *argv[])
 	recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
 	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
 
-	for(int j = 0; j < size; j++){
+	char tmp2, isSorted = 0;
+	while(isSorted==0){
+		isSorted = 1;
 		if(rank%2){
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1);
+				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
 			}
 			//MPI_Barrier(custom_world);
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvNext,&List_size_in_process,0);
+				merge(&RecvNext,&List_size_in_process,0, &isSorted);
 			}
 		}else{
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
 				
-			  merge(&RecvNext,&List_size_in_process,0);
+			  merge(&RecvNext,&List_size_in_process,0, &isSorted);
 			}
 			//MPI_Barrier(custom_world);
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1);
+				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
 
 			}
 		}
+		    tmp2=isSorted;
+        MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
 	MPI_File_open(custom_world, argv[3], MPI_MODE_CREATE|MPI_MODE_WRONLY , MPI_INFO_NULL, &file_out);
@@ -112,19 +116,20 @@ int main(int argc, char *argv[])
 	MPI_File_close(&file_out);
 
 	free(arr);
-  free(tmp);
+	free(tmp);
 	//MPI_Barrier(custom_world);
 	MPI_Finalize();
 	return 0;
 }
 
-void merge(int* recvnum, int *arr_num, int mode){ 
+void merge(int* recvnum, int *arr_num, int mode, char* isSorted){ 
   if(mode){//from prev keep large
 	int recv_ptr = *recvnum - 1;
 	int arr_ptr = *arr_num - 1;
     for(int tmp_ptr = *arr_num-1; tmp_ptr >=0; tmp_ptr--){ 
 	    if(recv_ptr>=0 && arr[arr_ptr] < recv[recv_ptr]){
         tmp[tmp_ptr] = recv[recv_ptr];
+		    *isSorted = 0;
         --recv_ptr;
       }else{
         tmp[tmp_ptr] = arr[arr_ptr];
@@ -137,6 +142,7 @@ void merge(int* recvnum, int *arr_num, int mode){
     for(int tmp_ptr = 0; tmp_ptr < *arr_num; tmp_ptr++){
 	  if(recv_ptr< *recvnum && recv[recv_ptr] < arr[arr_ptr]){
         tmp[tmp_ptr] = recv[recv_ptr];
+		    *isSorted = 0;
         ++recv_ptr;
       }else{
         tmp[tmp_ptr] = arr[arr_ptr];
