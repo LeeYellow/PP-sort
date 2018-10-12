@@ -4,7 +4,7 @@
 #include <math.h>
 
 int cmp( const void *a , const void *b);
-void merge(int* changenum, int* arr_num, int mode, char* isSorted);
+void merge(int* changenum, int* arr_num, int mode);
 float* tmp;
 float* freee;
 float* arr;
@@ -81,34 +81,30 @@ int main(int argc, char *argv[])
 	recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
 	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
 
-	for(int j = 0; j < size; j++);
-		isSorted = 1;
-		
+	for(int j = 0; j < size; j++){
 		if(rank%2){
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
+				merge(&RecvPrev,&List_size_in_process,1);
 			}
 			//MPI_Barrier(custom_world);
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvNext,&List_size_in_process,0, &isSorted);
+				merge(&RecvNext,&List_size_in_process,0);
 			}
 		}else{
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
 				
-			  merge(&RecvNext,&List_size_in_process,0, &isSorted);
+			  merge(&RecvNext,&List_size_in_process,0);
 			}
 			//MPI_Barrier(custom_world);
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
+				merge(&RecvPrev,&List_size_in_process,1);
 
 			}
 		}
-		tmp2=isSorted;
-		MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
 	MPI_File_open(custom_world, argv[3], MPI_MODE_CREATE|MPI_MODE_WRONLY , MPI_INFO_NULL, &file_out);
@@ -122,7 +118,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void merge(int* recvnum, int *arr_num, int mode, char* isSorted){ 
+void merge(int* recvnum, int *arr_num, int mode){ 
   if(mode){//from prev keep large
 	int recv_ptr = *recvnum - 1;
 	int arr_ptr = *arr_num - 1;
@@ -130,7 +126,6 @@ void merge(int* recvnum, int *arr_num, int mode, char* isSorted){
 	    if(recv_ptr>=0 && arr[arr_ptr] < recv[recv_ptr]){
         tmp[tmp_ptr] = recv[recv_ptr];
         --recv_ptr;
-        *isSorted = 0;
       }else{
         tmp[tmp_ptr] = arr[arr_ptr];
         --arr_ptr;
@@ -143,7 +138,6 @@ void merge(int* recvnum, int *arr_num, int mode, char* isSorted){
 	  if(recv_ptr< *recvnum && recv[recv_ptr] < arr[arr_ptr]){
         tmp[tmp_ptr] = recv[recv_ptr];
         ++recv_ptr;
-        *isSorted = 0;
       }else{
         tmp[tmp_ptr] = arr[arr_ptr];
         ++arr_ptr;
