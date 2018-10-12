@@ -1,10 +1,11 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
+#define max(x,y) (x > y?x:y) 
 
 int cmp( const void *a , const void *b);
 void merge(float *arr, float *recv, int* changenum, int* arr_num, int mode, char* isSorted);
+float* tmp;
 int main(int argc, char *argv[])
 {
 	int rank, size;
@@ -19,7 +20,7 @@ int main(int argc, char *argv[])
   
 	if (N < size) {
 		MPI_Comm_group(MPI_COMM_WORLD, &origin_group);		// Obtain the group of processes in the world communicator
-		int ranges[3] = { N, size-1, 1 };                   // Remove all unnecessary ranks
+		int ranges[][3] = { {N, size-1, 1} };                   // Remove all unnecessary ranks
 		MPI_Group_range_excl(origin_group, 1, ranges, &new_group);
 		MPI_Comm_create(MPI_COMM_WORLD, new_group, &custom_world);// Create a new communicator
 
@@ -29,7 +30,7 @@ int main(int argc, char *argv[])
 		}size = N;
 	}
   
-	int List_size_in_process, front, rear, rest;
+	int List_size_in_process, front, rest;
 	int RecvPrev, RecvNext;
 
 	rest = N%size;
@@ -55,7 +56,6 @@ int main(int argc, char *argv[])
 		RecvNext = List_size_in_process;
 	}
 	
-	rear = front+List_size_in_process-1;
 		
 	//MPI open file
 	MPI_File file_in,file_out;
@@ -72,11 +72,12 @@ int main(int argc, char *argv[])
 	MPI_File_close(&file_in);
  
 	char isSorted = 0;
-	int changeprev = ceil(ceil((double)N/(double)size)/2);
+	//int changeprev = ceil(ceil((double)N/(double)size)/2);
 	
 	//sort inside 
 	qsort(arr, List_size_in_process, sizeof(float), cmp);
-	float *recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
+	float *recv=(float*)malloc(RecvPrev*sizeof(float));
+	tmp=(float*)malloc((List_size_in_process+max(RecvPrev,RecvNext))*sizeof(float));
 	while(isSorted==0){
 		isSorted = 1;
 		
@@ -98,23 +99,17 @@ int main(int argc, char *argv[])
 			}
 		}else{
 			if(rank != size-1){	
-				//float *recv=(float*)malloc(RecvNext*sizeof(MPI_FLOAT));//send to next keep small 01
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				
 				merge(arr,recv,&RecvNext,&List_size_in_process,0, &isSorted);
-				//free(recv);	
 			}
 			MPI_Barrier(custom_world);
 			if(rank > 0){ 
-				//float *recv1=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));//send to prev keep large 10
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
-
 				merge(arr,recv,&RecvPrev,&List_size_in_process,1, &isSorted);
-				//free(recv1);
 			}
 		}
-		char tmp=isSorted;
-		MPI_Allreduce(&tmp, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
+		char tmp2=isSorted;
+		MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
 	MPI_File_open(custom_world, argv[3], MPI_MODE_CREATE|MPI_MODE_WRONLY , MPI_INFO_NULL, &file_out);
@@ -122,13 +117,13 @@ int main(int argc, char *argv[])
 	MPI_File_close(&file_out);
 
 	free(arr);
+	free(tmp);
 	MPI_Barrier(custom_world);
 	MPI_Finalize();
 	return 0;
 }
 
 void merge(float *arr, float *recv, int* recvnum, int *arr_num, int mode, char* isSorted){ 
-  float *tmp=(float*)malloc(*arr_num*sizeof(float));
   if(mode){//from prev keep large
 	int recv_ptr = *recvnum - 1;
 	int tmp_ptr = *arr_num - 1;
@@ -159,7 +154,7 @@ void merge(float *arr, float *recv, int* recvnum, int *arr_num, int mode, char* 
       }
     }
   }
-  free(tmp);
+
 
 }
 
