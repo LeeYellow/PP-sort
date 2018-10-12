@@ -80,8 +80,8 @@ int main(int argc, char *argv[])
 	qsort(arr, List_size_in_process, sizeof(float), cmp);
 	recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
 	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
-  char isSorted = 0;
-	while(isSorted==0){
+
+	for(int j = 0; j < size; j++);
 		isSorted = 1;
 		
 		if(rank%2){
@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
 				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
 			}
-			MPI_Barrier(custom_world);
+			//MPI_Barrier(custom_world);
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
 				merge(&RecvNext,&List_size_in_process,0, &isSorted);
@@ -97,16 +97,17 @@ int main(int argc, char *argv[])
 		}else{
 			if(rank != size-1){	
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
-				merge(&RecvNext,&List_size_in_process,0, &isSorted);
+				
+			  merge(&RecvNext,&List_size_in_process,0, &isSorted);
 			}
-			MPI_Barrier(custom_world);
+			//MPI_Barrier(custom_world);
 			if(rank > 0){ 
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
 				merge(&RecvPrev,&List_size_in_process,1, &isSorted);
 
 			}
 		}
-		char tmp2=isSorted;
+		tmp2=isSorted;
 		MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
@@ -116,7 +117,7 @@ int main(int argc, char *argv[])
 
 	free(arr);
   free(tmp);
-	MPI_Barrier(custom_world);
+	//MPI_Barrier(custom_world);
 	MPI_Finalize();
 	return 0;
 }
@@ -137,7 +138,7 @@ void merge(int* recvnum, int *arr_num, int mode, char* isSorted){
     }
   }else{
     int recv_ptr = 0;
-	int arr_ptr = 0;
+	  int arr_ptr = 0;
     for(int tmp_ptr = 0; tmp_ptr < *arr_num; tmp_ptr++){
 	  if(recv_ptr< *recvnum && recv[recv_ptr] < arr[arr_ptr]){
         tmp[tmp_ptr] = recv[recv_ptr];
@@ -163,3 +164,4 @@ int cmp( const void *a , const void *b){
 	}
     return *(const float*)a>*(const float*)b;
 }
+
