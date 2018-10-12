@@ -4,7 +4,10 @@
 #include <math.h>
 
 int cmp( const void *a , const void *b);
-void merge(float *arr, float *recv, int* changenum, int* arr_num, int mode, char* isSorted);
+void merge(float *recv, int* changenum, int* arr_num, int mode, char* isSorted);
+float* tmp;
+float* freee;
+float* arr;
 int main(int argc, char *argv[])
 {
 	int rank, size;
@@ -29,7 +32,7 @@ int main(int argc, char *argv[])
 		}size = N;
 	}
   
-	int List_size_in_process, front, rear, rest;
+	int List_size_in_process, front, rest;
 	int RecvPrev, RecvNext;
 
 	rest = N%size;
@@ -55,7 +58,6 @@ int main(int argc, char *argv[])
 		RecvNext = List_size_in_process;
 	}
 	
-	rear = front+List_size_in_process-1;
 		
 	//MPI open file
 	MPI_File file_in,file_out;
@@ -67,16 +69,17 @@ int main(int argc, char *argv[])
 	}
     //MPI read file
 	offset=front*sizeof(MPI_FLOAT);
-	float *arr=(float*)malloc(List_size_in_process*sizeof(MPI_FLOAT));
+	arr=(float*)malloc(List_size_in_process*sizeof(MPI_FLOAT));
 	MPI_File_read_at(file_in,offset,arr,List_size_in_process,MPI_FLOAT,MPI_STATUS_IGNORE);
 	MPI_File_close(&file_in);
  
-	char isSorted = 0;
-	int changeprev = ceil(ceil((double)N/(double)size)/2);
+	
 	
 	//sort inside 
 	qsort(arr, List_size_in_process, sizeof(float), cmp);
 	float *recv=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));
+	tmp=(float*)malloc((List_size_in_process)*sizeof(float));
+  char isSorted = 0;
 	while(isSorted==0){
 		isSorted = 1;
 		
@@ -85,7 +88,7 @@ int main(int argc, char *argv[])
 				//float *recv1=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));//send to / receive from prev keep large 10
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
 
-				merge(arr,recv,&RecvPrev,&List_size_in_process,1, &isSorted);
+				merge(recv,&RecvPrev,&List_size_in_process,1, &isSorted);
 				//free(recv1);
 			}
 			MPI_Barrier(custom_world);
@@ -93,7 +96,7 @@ int main(int argc, char *argv[])
 				//float *recv=(float*)malloc(RecvNext*sizeof(MPI_FLOAT));//send to next keep small 01
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
 				
-				merge(arr,recv,&RecvNext,&List_size_in_process,0, &isSorted);
+				merge(recv,&RecvNext,&List_size_in_process,0, &isSorted);
 				//free(recv);	
 			}
 		}else{
@@ -101,7 +104,7 @@ int main(int argc, char *argv[])
 				//float *recv=(float*)malloc(RecvNext*sizeof(MPI_FLOAT));//send to next keep small 01
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank+1,0,recv,RecvNext,MPI_FLOAT,rank+1,1,custom_world,MPI_STATUS_IGNORE);
 				
-				merge(arr,recv,&RecvNext,&List_size_in_process,0, &isSorted);
+			  merge(recv,&RecvNext,&List_size_in_process,0, &isSorted);
 				//free(recv);	
 			}
 			MPI_Barrier(custom_world);
@@ -109,12 +112,12 @@ int main(int argc, char *argv[])
 				//float *recv1=(float*)malloc(RecvPrev*sizeof(MPI_FLOAT));//send to prev keep large 10
 				MPI_Sendrecv(arr,List_size_in_process,MPI_FLOAT,rank-1,1,recv,RecvPrev,MPI_FLOAT,rank-1,0,custom_world,MPI_STATUS_IGNORE);
 
-				merge(arr,recv,&RecvPrev,&List_size_in_process,1, &isSorted);
+				merge(recv,&RecvPrev,&List_size_in_process,1, &isSorted);
 				//free(recv1);
 			}
 		}
-		char tmp=isSorted;
-		MPI_Allreduce(&tmp, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
+		char tmp2=isSorted;
+		MPI_Allreduce(&tmp2, &isSorted, 1,MPI_CHAR, MPI_BAND, custom_world);
 	}
   
 	MPI_File_open(custom_world, argv[3], MPI_MODE_CREATE|MPI_MODE_WRONLY , MPI_INFO_NULL, &file_out);
@@ -122,44 +125,44 @@ int main(int argc, char *argv[])
 	MPI_File_close(&file_out);
 
 	free(arr);
+  free(tmp);
 	MPI_Barrier(custom_world);
 	MPI_Finalize();
 	return 0;
 }
 
-void merge(float *arr, float *recv, int* recvnum, int *arr_num, int mode, char* isSorted){ 
-  float *tmp=(float*)malloc(*arr_num*sizeof(float));
+void merge(float *recv, int* recvnum, int *arr_num, int mode, char* isSorted){ 
   if(mode){//from prev keep large
 	int recv_ptr = *recvnum - 1;
-	int tmp_ptr = *arr_num - 1;
-    for(int arr_ptr = *arr_num-1; arr_ptr >=0; arr_ptr--){
-      tmp[arr_ptr] = arr[arr_ptr]; 
-	  if(recv_ptr>=0 && tmp[tmp_ptr] < recv[recv_ptr]){
-        arr[arr_ptr] = recv[recv_ptr];
+	int arr_ptr = *arr_num - 1;
+    for(int tmp_ptr = *arr_num-1; tmp_ptr >=0; tmp_ptr--){ 
+	    if(recv_ptr>=0 && arr[arr_ptr] < recv[recv_ptr]){
+        tmp[tmp_ptr] = recv[recv_ptr];
         --recv_ptr;
         *isSorted = 0;
         //printf("swap, mode:keep large\n");
       }else{
-        arr[arr_ptr] = tmp[tmp_ptr];
-        --tmp_ptr;
+        tmp[tmp_ptr] = arr[arr_ptr];
+        --arr_ptr;
       }
     }
   }else{//sent to next keep small
     int recv_ptr = 0;
-	int tmp_ptr = 0;
-    for(int arr_ptr = 0; arr_ptr < *arr_num; arr_ptr++){
-      tmp[arr_ptr] = arr[arr_ptr];
-	  if(recv_ptr< *recvnum && recv[recv_ptr] < tmp[tmp_ptr]){
-        arr[arr_ptr] = recv[recv_ptr];
-        recv_ptr++;
+	  int arr_ptr = 0;
+    for(int tmp_ptr = 0; tmp_ptr < *arr_num; tmp_ptr++){
+	  if(recv_ptr< *recvnum && recv[recv_ptr] < arr[arr_ptr]){
+        tmp[tmp_ptr] = recv[recv_ptr];
+        ++recv_ptr;
         *isSorted = 0;
       }else{
-        arr[arr_ptr] = tmp[tmp_ptr];
-        tmp_ptr++;
+        tmp[tmp_ptr] = arr[arr_ptr];
+        ++arr_ptr;
       }
-    }
+    } 
   }
-  free(tmp);
+  freee = arr;
+  arr = tmp;
+  tmp = freee;
 
 }
 
